@@ -18,6 +18,7 @@
 //   WinClipTexture —— 每个动画实例一份（视频纹理 + 掩码纹理），
 //                     同一 clip 的多只宠物共用，省掉 N 份纹理与 N 次上传。
 struct WinPetSurface {
+  HWND hwnd = nullptr;  // 关联的宠物窗口，重建 DComp target 时使用
   Microsoft::WRL::ComPtr<IDXGISwapChain1> swap;
   Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv;
   Microsoft::WRL::ComPtr<IDCompositionTarget> target;

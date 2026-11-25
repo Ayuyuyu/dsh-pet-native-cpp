@@ -70,6 +70,8 @@ constexpr wchar_t kTickClass[] = L"PetNativeCppTick";
 // 都会被当成退出指令，表现为「点一下宠物/选个动作程序就没了」。
 constexpr UINT kMsgRequestQuit = WM_APP + 101;  // 100 已被 kTrayMsg 占用
 constexpr int kMaxPets = 64;  // --pets 上限：50 只实测目标 + 余量
+// --monitor=N：1 表示主屏；0/缺省也固定主屏（不轮询）。
+int g_monitorChoice = 0;
 HWND g_tickHwnd = nullptr;
 int g_pendingCreates = 0;  // 启动时分批创建：还剩多少只没建
 // 单调宠物 id：关闭中间一只后不能用 g_pets.size() 复用同一个 id，
@@ -108,11 +110,45 @@ class ScopedTimerPeriod {
 // 主文件负责：初始化、窗口与消息分发、输入事件、全局节拍调度。
 // 帧管线、动作决策、菜单/托盘/工具与 GPU 渲染分别在各 win_*.cpp 与 core/。
 
+// 按枚举顺序收集显示器；主屏永远排第一，保证 --monitor=1 行为稳定。
+std::vector<HMONITOR> EnumerateMonitors() {
+  std::vector<HMONITOR> out;
+  EnumDisplayMonitors(nullptr, nullptr,
+                      [](HMONITOR h, HDC, LPRECT, LPARAM p) -> BOOL {
+                        reinterpret_cast<std::vector<HMONITOR>*>(p)->push_back(h);
+                        return TRUE;
+                      },
+                      reinterpret_cast<LPARAM>(&out));
+  const HMONITOR primary =
+      MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+  const auto it = std::find(out.begin(), out.end(), primary);
+  if (it != out.end() && it != out.begin()) std::rotate(out.begin(), it, it + 1);
+  if (out.empty()) out.push_back(primary);
+  return out;
+}
+
+// 返回目标显示器；未指定或 --monitor=N 越界时都用主屏。
+HMONITOR PickMonitor(int* monitorNo = nullptr) {
+  static const std::vector<HMONITOR> monitors = EnumerateMonitors();
+  int selected = 0;
+  if (g_monitorChoice > 0) {
+    if (g_monitorChoice <= static_cast<int>(monitors.size())) {
+      selected = g_monitorChoice - 1;
+    } else {
+      Log("monitor {} out of range (total {}), use primary", g_monitorChoice,
+          monitors.size());
+    }
+  }
+  if (monitorNo != nullptr) *monitorNo = selected + 1;
+  return monitors[static_cast<size_t>(selected)];
+}
+
 bool CreatePet(int index) {
   auto pet = std::make_unique<Pet>();
   pet->index = index;
 
-  HMONITOR mon = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+  int monitorNo = 1;
+  HMONITOR mon = PickMonitor(&monitorNo);
   MONITORINFO mi{sizeof(mi)};
   if (!GetMonitorInfoW(mon, &mi)) {
     // 失败时 rcWork 全 0，会把宠物算到屏幕外，用户完全看不到它。
@@ -203,8 +239,8 @@ bool CreatePet(int index) {
   ShowWindow(hwnd, SW_SHOWNOACTIVATE);
   // 成功：窗口生命周期交给 g_pets（关闭时 DestroyWindow），RAII 不再接管。
   window.release();
-  Log("pet{} created {}x{} at {},{}", index, g_pets.back()->windowW,
-      g_pets.back()->windowH, homeX, homeY);
+  Log("pet{} created {}x{} at {},{} (monitor={})", index,
+      g_pets.back()->windowW, g_pets.back()->windowH, homeX, homeY, monitorNo);
   return true;
 }
 
@@ -519,6 +555,22 @@ int PetCountFromCommandLine(std::wstring_view args) {
   return value > 0 ? value : 1;
 }
 
+int MonitorChoiceFromCommandLine(std::wstring_view args) {
+  const size_t pos = args.find(L"--monitor=");
+  if (pos == std::wstring_view::npos) return 0;
+  int value = 0;
+  for (const wchar_t c : args.substr(pos + 10)) {
+    if (c < L'0' || c > L'9') break;
+    value = value * 10 + static_cast<int>(c - L'0');
+    // 上限 64：显示器不可能这么多，钳制后仍可安全转 int 并落到越界兜底。
+    if (value > kMaxPets) {
+      value = kMaxPets;
+      break;
+    }
+  }
+  return value;  // 0 = 轮询，1 = 第一台
+}
+
 }  // namespace
 
 // COM 初始化：DirectComposition 是 COM API，未初始化的线程上
@@ -588,6 +640,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR lpCmdLine, int) {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
   core::log::Init(args.find(L"--debug") != std::wstring_view::npos,
                   &WinLogSink);
+  g_monitorChoice = MonitorChoiceFromCommandLine(args);
   if (const size_t clipPos = args.find(L"--clip=");
       clipPos != std::wstring_view::npos) {
     std::wstring name(args.substr(clipPos + 7));

@@ -16,6 +16,17 @@ Windows 场景内存较原方案降低约 90%，新增一只宠物约增加 8 MB
 - 动作配置：`assets/pet-config.json`
 - 图标：`assets/pet.ico`  素材来自[fisharchive](https://fisharchive.cc/)
 
+## 运行
+**右键菜单**  
+![右键菜单](doc/right_button.png)
+
+**运行动作**  
+![alt text](doc/clip01.png)
+
+![alt text](doc/clip02.png)
+
+![alt text](doc/pet50.png)
+
 ## 特性
 
 - **透明与穿透**：`WS_EX_NOREDIRECTIONBITMAP` + DirectComposition，逐帧按 alpha 掩码裁剪窗口区域；非可点区域鼠标穿透。
@@ -142,6 +153,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\package.ps1
 | 参数 | 作用 |
 | --- | --- |
 | `--pets=N` | 启动时创建 N 只宠物（钳制到 1~64） |
+| `--monitor=N` | 新宠物创建在第 N 台显示器（1 起，主屏为 1）；不指定则全部在主屏 |
 | `--debug` | 打开日志与掩码叠加调试（BMP 导出需编译期开关 `PET_DEBUG_MASK_BMP`） |
 | `--clip=名字` | 指定启动动作，名字含空格可用引号包裹 |
 | `--probe <path>` | 仅解码指定 webm 的首帧并输出诊断信息后退出 |

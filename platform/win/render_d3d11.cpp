@@ -166,6 +166,7 @@ bool RenderInitShared() {
 }
 
 bool RenderCreateTarget(WinPetSurface& surface, HWND hwnd, int w, int h) {
+  surface.hwnd = hwnd;
   if (!CreateSwapChain(surface, w, h)) return false;
   if (!CreateBackBufferView(surface)) return false;
 
@@ -323,16 +324,33 @@ bool RenderFrame(WinPetSurface& surface, const WinClipTexture& t, int w, int h,
 }
 
 bool RenderResize(WinPetSurface& surface, int w, int h) {
-  if (!surface.swap) return false;
+  if (!surface.swap || w <= 0 || h <= 0) return false;
+  if (surface.params != nullptr) {
+    D3D11_BUFFER_DESC desc{};
+    surface.params->GetDesc(&desc);
+    if (desc.ByteWidth == static_cast<UINT>(w) * 16) return true;
+  }
+  // DComp 成为 swap chain 的内容后，ResizeBuffers 会因旧缓冲仍被合成器引用
+  // 而返回 DXGI_ERROR_INVALID_CALL；这里按新尺寸重建交换链与 visual。
   g_context->OMSetRenderTargets(0, nullptr, nullptr);
-  // 必须先 ResizeBuffers 成功再丢弃旧 RTV：失败时旧交换链与旧 RTV 仍然有效，
-  // 提前 Reset 会让之后每一帧的 RenderFrame 直接返回，画面永久冻结。
-  if (FAILED(surface.swap->ResizeBuffers(0, static_cast<UINT>(w),
-                                         static_cast<UINT>(h),
-                                         DXGI_FORMAT_UNKNOWN, 0))) {
+  surface.rtv.Reset();
+  surface.visual.Reset();
+  surface.target.Reset();
+  surface.swap.Reset();
+
+  if (!CreateSwapChain(surface, w, h) || !CreateBackBufferView(surface)) {
+    core::log::Log("recreate swap chain {}x{} failed", w, h);
     return false;
   }
-  surface.rtv.Reset();
-  // 纹理属于动画实例，由 winclips::ResizeAll 在缩放时立即重建，不在这里处理。
-  return CreateBackBufferView(surface);
+  // 重新绑定 DComp visual（target 必须按窗口重建）。
+  if (surface.hwnd == nullptr ||
+      FAILED(g_dcomp->CreateTargetForHwnd(surface.hwnd, TRUE, &surface.target)) ||
+      FAILED(g_dcomp->CreateVisual(&surface.visual)) ||
+      FAILED(surface.visual->SetContent(surface.swap.Get())) ||
+      FAILED(surface.target->SetRoot(surface.visual.Get())) ||
+      FAILED(g_dcomp->Commit())) {
+    core::log::Log("rebind dcomp visual failed");
+    return false;
+  }
+  return true;
 }
