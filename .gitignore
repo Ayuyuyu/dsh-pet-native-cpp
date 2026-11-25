@@ -1,0 +1,51 @@
+# ---------- 构建与依赖产物 ----------
+# CMake 构建目录（含 CMakeCache.txt、CMakeFiles 等）
+build/
+build-msvc/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# 第三方依赖产物（裁剪版 FFmpeg 构建结果，体积大且不传 git；按 README 自行构建）
+third_party/ffmpeg-*/
+third_party/libvpx-*/
+
+# 发布/打包输出目录
+dist/
+
+# ---------- 编译产物（Makefile / Linux） ----------
+*.o
+pet-linux
+
+# ---------- 编译/IDE 临时文件 ----------
+*.user
+*.user.*
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+.vs/
+.idea/
+.vscode/
+
+# ---------- 操作系统文件 ----------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# ---------- 编辑器临时文件 ----------
+*.swp
+*~
+*.bak
+
+# ---------- 运行时调试产物 ----------
+*.log
+*.bmp
+shot-*.png
+*.txt
+# CMakeLists.txt 是源码，不能被上面的 *.txt 规则忽略
+!CMakeLists.txt
+doc_local
+.code*

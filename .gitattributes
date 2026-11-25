@@ -1,0 +1,7 @@
+# 所有文本文件统一使用 LF 换行
+* text=auto eol=lf
+
+# 二进制资源不做换行转换
+*.webm -text -diff -eol
+*.ico -text -diff -eol
+*.wav -text -diff -eol
